@@ -157,7 +157,20 @@ impl Visitor<Result<Type, TypeError>> for TypeChecker {
         }
 
         match op {
-            Op::Add | Op::Sub | Op::Mul | Op::Div => {
+            Op::Add => {
+                if left_ty == Type::Int && right_ty == Type::Int {
+                    Ok(Type::Int)
+                } else if left_ty == Type::Float && right_ty == Type::Float {
+                    Ok(Type::Float)
+                } else if left_ty == Type::String || right_ty == Type::String {
+                    Ok(Type::String)
+                } else {
+                    let err = TypeError::InvalidOperation { op: *op, left: left_ty, right: right_ty, pos: *pos };
+                    self.errors.push(err.clone());
+                    Err(err)
+                }
+            }
+            Op::Sub | Op::Mul | Op::Div => {
                 if left_ty == Type::Int && right_ty == Type::Int {
                     Ok(Type::Int)
                 } else if left_ty == Type::Float && right_ty == Type::Float {

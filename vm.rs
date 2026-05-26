@@ -107,6 +107,8 @@ impl Vm {
                     (Value::Int(x), Value::Int(y)) => self.stack.push(Value::Int(x + y)),
                     (Value::Float(x), Value::Float(y)) => self.stack.push(Value::Float(x + y)),
                     (Value::String(x), Value::String(y)) => self.stack.push(Value::String(format!("{}{}", x, y))),
+                    (Value::String(x), other) => self.stack.push(Value::String(format!("{}{}", x, other))),
+                    (other, Value::String(y)) => self.stack.push(Value::String(format!("{}{}", other, y))),
                     _ => return Err("Operands must be two numbers or two strings for ADD.".to_string()),
                 }
             }
@@ -225,12 +227,14 @@ impl Vm {
                 let text = format!("{}", val);
                 print!("{}", text);
                 self.output.push(text);
+                self.stack.push(Value::Null);
             }
             OP_PRINTLN => {
                 let val = self.stack.pop().ok_or_else(|| "Stack underflow on PRINTLN".to_string())?;
                 let text = format!("{}\n", val);
                 print!("{}", text);
                 self.output.push(text);
+                self.stack.push(Value::Null);
             }
             OP_RETURN => {
                 self.is_finished = true;

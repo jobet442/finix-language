@@ -24,18 +24,7 @@ impl<'a> Parser<'a> {
         self.current_token = std::mem::replace(&mut self.peek_token, self.lexer.next_token());
     }
 
-    fn expect_peek(&mut self, t: &TokenType) -> Result<(), String> {
-        // Compare types without checking inner values for simplicity
-        if std::mem::discriminant(&self.peek_token.token_type) == std::mem::discriminant(t) {
-            self.next_token();
-            Ok(())
-        } else {
-            Err(format!(
-                "Expected next token to be {}, got {} instead at line {}, col {}",
-                t, self.peek_token.token_type, self.peek_token.pos.line, self.peek_token.pos.col
-            ))
-        }
-    }
+
 
     pub fn parse_program(&mut self) -> Result<Program, String> {
         let mut statements = Vec::new();
@@ -177,7 +166,12 @@ impl<'a> Parser<'a> {
             }
         }
 
-        self.expect_peek(&TokenType::RightBrace)?; // make sure we end with '}'
+        if self.current_token.token_type != TokenType::RightBrace {
+            return Err(format!(
+                "Expected '}}' at end of block, got {} instead at line {}, col {}",
+                self.current_token.token_type, self.current_token.pos.line, self.current_token.pos.col
+            ));
+        }
         self.next_token(); // consume '}'
 
         Ok(Stmt::Block { statements, pos })

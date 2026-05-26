@@ -56,25 +56,8 @@ impl Default for FinixGui {
 
 impl FinixGui {
     pub fn new() -> Self {
-        let default_source = r#"// Finix Language Demonstration
-let x = 5;
-let y = 10;
-let z = x * 2 + y;
-
-println("Calculated z: " + z);
-
-if z > 15 {
-    println("z is greater than 15!");
-} else {
-    println("z is 15 or less.");
-}
-
-// Loop demonstration
-let count = 3;
-while count > 0 {
-    println("Countdown: " + count);
-    count = count - 1;
-}
+        let default_source = r#"// Hello World Demonstration
+println("Hello World!");
 "#.to_string();
 
         let mut gui = Self {
@@ -381,17 +364,21 @@ println(a + b);
                         .fill(retro_blue)
                         .inner_margin(4.0)
                         .show(ui, |ui| {
-                            let text_edit = egui::TextEdit::multiline(&mut self.source_code)
-                                .font(egui::TextStyle::Monospace)
-                                .text_color(retro_white)
-                                .desired_width(f32::INFINITY)
-                                .desired_rows(18)
-                                .lock_focus(true);
-                            
-                            let response = ui.add(text_edit);
-                            if response.changed() {
-                                self.compile_code();
-                            }
+                            egui::ScrollArea::vertical()
+                                .id_source("editor_scroll")
+                                .max_height(360.0)
+                                .show(ui, |ui| {
+                                    let text_edit = egui::TextEdit::multiline(&mut self.source_code)
+                                        .font(egui::TextStyle::Monospace)
+                                        .text_color(retro_white)
+                                        .desired_width(f32::INFINITY)
+                                        .desired_rows(18)
+                                        .lock_focus(true);
+                                    let response = ui.add(text_edit);
+                                    if response.changed() {
+                                        self.compile_code();
+                                    }
+                                });
                         });
                     
                     ui.colored_label(retro_gray, "╚══════════════════════════════════════════════════════════════════════╝");
@@ -412,14 +399,20 @@ println(a + b);
                                 &console_text
                             }.to_string();
 
-                            ui.add(
-                                egui::TextEdit::multiline(&mut console_display)
-                                    .font(egui::TextStyle::Monospace)
-                                    .text_color(retro_cyan)
-                                    .desired_width(f32::INFINITY)
-                                    .desired_rows(6)
-                                    .interactive(false)
-                            );
+                            egui::ScrollArea::vertical()
+                                .id_source("console_scroll")
+                                .max_height(140.0)
+                                .stick_to_bottom(true)
+                                .show(ui, |ui| {
+                                    ui.add(
+                                        egui::TextEdit::multiline(&mut console_display)
+                                            .font(egui::TextStyle::Monospace)
+                                            .text_color(retro_cyan)
+                                            .desired_width(f32::INFINITY)
+                                            .desired_rows(6)
+                                            .interactive(false)
+                                    );
+                                });
                         });
                         
                     ui.colored_label(retro_gray, "╚══════════════════════════════════════════════════════════════════════╝");
