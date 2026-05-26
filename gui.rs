@@ -39,6 +39,14 @@ pub struct FinixGui {
     active_tab: Tab,
     execution_result: Option<InterpretResult>,
     show_help: bool,
+    gui_components: Vec<GuiComponent>,
+
+    // File Management
+    current_file_path: String,
+    show_save_dialog: bool,
+    show_open_dialog: bool,
+    show_new_project_dialog: bool,
+    dialog_input_path: String,
 }
 
 #[derive(PartialEq)]
@@ -46,6 +54,17 @@ enum Tab {
     VmState,
     AstView,
     TokensView,
+    GuiBuilder,
+}
+
+#[derive(Clone, PartialEq)]
+enum GuiComponent {
+    Button(String),
+    Label(String),
+    TextInput(String),
+    ClassDef(String),
+    FunctionDef(String),
+    ModuleDef(String),
 }
 
 impl Default for FinixGui {
@@ -72,6 +91,12 @@ println("Hello World!");
             active_tab: Tab::VmState,
             execution_result: None,
             show_help: false,
+            gui_components: Vec::new(),
+            current_file_path: "untitled.fnx".to_string(),
+            show_save_dialog: false,
+            show_open_dialog: false,
+            show_new_project_dialog: false,
+            dialog_input_path: String::new(),
         };
         gui.compile_code();
         gui
@@ -227,6 +252,9 @@ impl App for FinixGui {
         // Text selections -> Yellow background
         visuals.selection.bg_fill = retro_yellow;
         visuals.selection.stroke = egui::Stroke::new(1.0_f32, retro_black);
+        
+        // Text input background
+        visuals.extreme_bg_color = retro_black;
 
         ctx.set_visuals(visuals);
 
@@ -234,11 +262,20 @@ impl App for FinixGui {
         if ctx.input(|i| i.key_pressed(egui::Key::F1)) {
             self.show_help = !self.show_help;
         }
+        if ctx.input(|i| i.key_pressed(egui::Key::F2)) {
+            if self.current_file_path == "untitled.fnx" {
+                self.show_save_dialog = true;
+                self.dialog_input_path = self.current_file_path.clone();
+            } else {
+                let _ = std::fs::write(&self.current_file_path, &self.source_code);
+            }
+        }
         if ctx.input(|i| i.key_pressed(egui::Key::F3)) {
             self.source_code = r#"let a = 1;
 let b = 2;
 println(a + b);
 "#.to_string();
+            self.current_file_path = "untitled.fnx".to_string();
             self.compile_code();
         }
         if ctx.input(|i| i.key_pressed(egui::Key::F9)) {
@@ -263,9 +300,34 @@ println(a + b);
                     ui.style_mut().visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0_f32, retro_black);
 
                     ui.menu_button("File", |ui| {
-                        if ui.button("New / Reset (F3)").clicked() {
+                        if ui.button("New Project").clicked() {
+                            self.show_new_project_dialog = true;
+                            self.dialog_input_path = "MyProject".to_string();
+                            ui.close_menu();
+                        }
+                        if ui.button("New File (F3)").clicked() {
                             self.source_code = "println(\"Hello World!\");\n".to_string();
+                            self.current_file_path = "untitled.fnx".to_string();
                             self.compile_code();
+                            ui.close_menu();
+                        }
+                        if ui.button("Open File").clicked() {
+                            self.show_open_dialog = true;
+                            self.dialog_input_path = self.current_file_path.clone();
+                            ui.close_menu();
+                        }
+                        if ui.button("Save (F2)").clicked() {
+                            if self.current_file_path == "untitled.fnx" {
+                                self.show_save_dialog = true;
+                                self.dialog_input_path = self.current_file_path.clone();
+                            } else {
+                                let _ = std::fs::write(&self.current_file_path, &self.source_code);
+                            }
+                            ui.close_menu();
+                        }
+                        if ui.button("Save As...").clicked() {
+                            self.show_save_dialog = true;
+                            self.dialog_input_path = self.current_file_path.clone();
                             ui.close_menu();
                         }
                         if ui.button("Help (F1)").clicked() {
@@ -317,6 +379,10 @@ println(a + b);
                             self.active_tab = Tab::TokensView;
                             ui.close_menu();
                         }
+                        if ui.button("Show GUI Builder").clicked() {
+                            self.active_tab = Tab::GuiBuilder;
+                            ui.close_menu();
+                        }
                     });
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -331,6 +397,8 @@ println(a + b);
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.colored_label(retro_black, "F1 Help");
+                    ui.separator();
+                    ui.colored_label(retro_black, "F2 Save");
                     ui.separator();
                     ui.colored_label(retro_black, "F3 Open/Reset");
                     ui.separator();
@@ -357,7 +425,13 @@ println(a + b);
             .show(ctx, |ui| {
                 ui.vertical(|ui| {
                     // Editor Window frame
-                    ui.colored_label(retro_gray, "╔═[■]═══════════════════════ Edit: edit.fnx ═══════════════════════[↕]═╗");
+                    let mut file_name = self.current_file_path.clone();
+                    if file_name.len() > 16 {
+                        file_name.truncate(13);
+                        file_name.push_str("...");
+                    }
+                    let title = format!("╔═[■]══════════════════════ Edit: {:<16} ══════════════════════[↕]═╗", file_name);
+                    ui.colored_label(retro_gray, title);
                     
                     egui::Frame::none()
                         .stroke(egui::Stroke::new(1.0_f32, retro_gray))
@@ -432,6 +506,7 @@ println(a + b);
                     ui.selectable_value(&mut self.active_tab, Tab::VmState, " VM Watch ");
                     ui.selectable_value(&mut self.active_tab, Tab::AstView, " AST Tree ");
                     ui.selectable_value(&mut self.active_tab, Tab::TokensView, " Tokenizer ");
+                    ui.selectable_value(&mut self.active_tab, Tab::GuiBuilder, " GUI Builder ");
                 });
                 ui.add_space(4.0);
 
@@ -565,6 +640,146 @@ println(a + b);
 
                         ui.colored_label(retro_gray, "╚═════════════════════════════════════════════════════════════════════╝");
                     }
+                    Tab::GuiBuilder => {
+                        ui.colored_label(retro_gray, "╔═══════════════════════════ GUI Builder ═════════════════════════════╗");
+                        
+                        egui::Frame::none()
+                            .stroke(egui::Stroke::new(1.0_f32, retro_gray))
+                            .fill(retro_blue)
+                            .inner_margin(4.0)
+                            .show(ui, |ui| {
+                                ui.columns(2, |columns| {
+                                    // Column 1: Toolbox
+                                    columns[0].vertical(|ui| {
+                                        ui.colored_label(retro_cyan, "┌─ Toolbox ─────────────────");
+                                        ui.add_space(4.0);
+                                        if ui.button("Add Button").clicked() {
+                                            self.gui_components.push(GuiComponent::Button("New Button".to_string()));
+                                        }
+                                        if ui.button("Add Label").clicked() {
+                                            self.gui_components.push(GuiComponent::Label("New Label".to_string()));
+                                        }
+                                        if ui.button("Add Text Input").clicked() {
+                                            self.gui_components.push(GuiComponent::TextInput("Text".to_string()));
+                                        }
+                                        ui.add_space(8.0);
+                                        ui.colored_label(retro_cyan, "┌─ Code Constructs ─────────");
+                                        ui.add_space(4.0);
+                                        if ui.button("Add Module").clicked() {
+                                            self.gui_components.push(GuiComponent::ModuleDef("NewModule".to_string()));
+                                        }
+                                        if ui.button("Add Class").clicked() {
+                                            self.gui_components.push(GuiComponent::ClassDef("NewClass".to_string()));
+                                        }
+                                        if ui.button("Add Function").clicked() {
+                                            self.gui_components.push(GuiComponent::FunctionDef("new_func".to_string()));
+                                        }
+                                        ui.add_space(8.0);
+                                        if ui.button("Clear Canvas").clicked() {
+                                            self.gui_components.clear();
+                                        }
+                                        ui.add_space(8.0);
+                                        ui.colored_label(retro_cyan, "┌─ Code Generation ─────────");
+                                        ui.add_space(4.0);
+                                        if ui.button("Generate Code").clicked() {
+                                            let mut generated = String::new();
+                                            for comp in &self.gui_components {
+                                                match comp {
+                                                    GuiComponent::ModuleDef(name) => generated.push_str(&format!("import {};\n\n", name)),
+                                                    GuiComponent::ClassDef(name) => generated.push_str(&format!("class {} {{\n    func init() {{\n        // TODO\n    }}\n}}\n\n", name)),
+                                                    GuiComponent::FunctionDef(name) => generated.push_str(&format!("func {}() {{\n    // TODO\n}}\n\n", name)),
+                                                    GuiComponent::Button(text) => generated.push_str(&format!("// UI Button\nlet btn_{} = \"{}\";\n\n", text.to_lowercase().replace(" ", "_"), text)),
+                                                    GuiComponent::Label(text) => generated.push_str(&format!("// UI Label\nlet lbl_{} = \"{}\";\n\n", text.to_lowercase().replace(" ", "_"), text)),
+                                                    GuiComponent::TextInput(text) => generated.push_str(&format!("// UI Text Input\nlet input_{} = \"{}\";\n\n", text.to_lowercase().replace(" ", "_"), text)),
+                                                }
+                                            }
+                                            if generated.is_empty() {
+                                                generated = "// No components on canvas\n".to_string();
+                                            }
+                                            self.source_code = generated;
+                                            self.current_file_path = "generated_gui.fnx".to_string();
+                                            self.compile_code();
+                                        }
+                                    });
+
+                                    // Column 2: Canvas
+                                    columns[1].vertical(|ui| {
+                                        ui.colored_label(retro_cyan, "┌─ Canvas ──────────────────");
+                                        ui.add_space(4.0);
+                                        
+                                        egui::Frame::none()
+                                            .stroke(egui::Stroke::new(1.0_f32, retro_gray))
+                                            .fill(egui::Color32::from_rgb(0, 0, 84)) // Darker blue backing
+                                            .inner_margin(8.0)
+                                            .show(ui, |ui| {
+                                                ui.set_min_height(200.0);
+                                                ui.set_min_width(ui.available_width());
+                                                
+                                                if self.gui_components.is_empty() {
+                                                    ui.colored_label(retro_gray, "Drop widgets here");
+                                                } else {
+                                                    let mut to_remove = None;
+                                                    for (i, comp) in self.gui_components.iter_mut().enumerate() {
+                                                        ui.horizontal(|ui| {
+                                                            match comp {
+                                                                GuiComponent::Button(text) => {
+                                                                    let _ = ui.button(text.clone());
+                                                                    ui.add(egui::TextEdit::singleline(text).text_color(retro_white));
+                                                                }
+                                                                GuiComponent::Label(text) => {
+                                                                    ui.label(text.clone());
+                                                                    ui.add(egui::TextEdit::singleline(text).text_color(retro_white));
+                                                                }
+                                                                GuiComponent::TextInput(text) => {
+                                                                    let mut fake_input = text.clone();
+                                                                    ui.add(egui::TextEdit::singleline(&mut fake_input).text_color(retro_white));
+                                                                    ui.add(egui::TextEdit::singleline(text).text_color(retro_white));
+                                                                }
+                                                                GuiComponent::ClassDef(name) => {
+                                                                    egui::Frame::none()
+                                                                        .stroke(egui::Stroke::new(1.0_f32, retro_gray))
+                                                                        .inner_margin(4.0)
+                                                                        .show(ui, |ui| {
+                                                                            ui.colored_label(retro_yellow, "Class");
+                                                                            ui.add(egui::TextEdit::singleline(name).text_color(retro_white));
+                                                                        });
+                                                                }
+                                                                GuiComponent::FunctionDef(name) => {
+                                                                    egui::Frame::none()
+                                                                        .stroke(egui::Stroke::new(1.0_f32, retro_gray))
+                                                                        .inner_margin(4.0)
+                                                                        .show(ui, |ui| {
+                                                                            ui.colored_label(retro_yellow, "Func ");
+                                                                            ui.add(egui::TextEdit::singleline(name).text_color(retro_white));
+                                                                        });
+                                                                }
+                                                                GuiComponent::ModuleDef(name) => {
+                                                                    egui::Frame::none()
+                                                                        .stroke(egui::Stroke::new(1.0_f32, retro_gray))
+                                                                        .inner_margin(4.0)
+                                                                        .show(ui, |ui| {
+                                                                            ui.colored_label(retro_yellow, "Mod  ");
+                                                                            ui.add(egui::TextEdit::singleline(name).text_color(retro_white));
+                                                                        });
+                                                                }
+                                                            }
+                                                            if ui.button(" X ").clicked() {
+                                                                to_remove = Some(i);
+                                                            }
+                                                        });
+                                                        ui.add_space(2.0);
+                                                    }
+                                                    if let Some(i) = to_remove {
+                                                        self.gui_components.remove(i);
+                                                    }
+                                                }
+                                            });
+                                    });
+                                });
+                            });
+
+                        ui.colored_label(retro_gray, "╚═════════════════════════════════════════════════════════════════════╝");
+                    }
                 }
 
                 // Global error panel
@@ -594,6 +809,7 @@ println(a + b);
                     ui.monospace("│ Turbo Finix IDE Keyboard Commands │");
                     ui.monospace("├───────────────────────────────────┤");
                     ui.monospace("│  F1        - Show Help            │");
+                    ui.monospace("│  F2        - Save File            │");
                     ui.monospace("│  F3        - Load Demo Template   │");
                     ui.monospace("│  F5        - Run VM bytecode      │");
                     ui.monospace("│  F8        - Single Step VM Inst  │");
@@ -613,6 +829,102 @@ println(a + b);
                 });
             if close_help || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
                 self.show_help = false;
+            }
+        }
+
+        // --- SAVE DIALOG ---
+        if self.show_save_dialog {
+            let mut close_dialog = false;
+            egui::Window::new(" Save File As ")
+                .resizable(false)
+                .collapsible(false)
+                .frame(egui::Frame::default().fill(retro_gray).stroke(egui::Stroke::new(2.0_f32, retro_yellow)).inner_margin(12.0))
+                .show(ctx, |ui| {
+                    ui.style_mut().visuals.override_text_color = Some(retro_black);
+                    ui.label("Enter file name to save:");
+                    ui.add(egui::TextEdit::singleline(&mut self.dialog_input_path).text_color(retro_white));
+                    ui.add_space(8.0);
+                    ui.horizontal(|ui| {
+                        ui.style_mut().visuals.widgets.inactive.bg_fill = retro_cyan;
+                        ui.style_mut().visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0_f32, retro_white);
+                        if ui.button("  Save  ").clicked() {
+                            self.current_file_path = self.dialog_input_path.clone();
+                            let _ = std::fs::write(&self.current_file_path, &self.source_code);
+                            close_dialog = true;
+                        }
+                        if ui.button(" Cancel ").clicked() {
+                            close_dialog = true;
+                        }
+                    });
+                });
+            if close_dialog || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                self.show_save_dialog = false;
+            }
+        }
+
+        // --- OPEN DIALOG ---
+        if self.show_open_dialog {
+            let mut close_dialog = false;
+            egui::Window::new(" Open File ")
+                .resizable(false)
+                .collapsible(false)
+                .frame(egui::Frame::default().fill(retro_gray).stroke(egui::Stroke::new(2.0_f32, retro_yellow)).inner_margin(12.0))
+                .show(ctx, |ui| {
+                    ui.style_mut().visuals.override_text_color = Some(retro_black);
+                    ui.label("Enter file name to open:");
+                    ui.add(egui::TextEdit::singleline(&mut self.dialog_input_path).text_color(retro_white));
+                    ui.add_space(8.0);
+                    ui.horizontal(|ui| {
+                        ui.style_mut().visuals.widgets.inactive.bg_fill = retro_cyan;
+                        ui.style_mut().visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0_f32, retro_white);
+                        if ui.button("  Open  ").clicked() {
+                            if let Ok(content) = std::fs::read_to_string(&self.dialog_input_path) {
+                                self.source_code = content;
+                                self.current_file_path = self.dialog_input_path.clone();
+                                self.compile_code();
+                            }
+                            close_dialog = true;
+                        }
+                        if ui.button(" Cancel ").clicked() {
+                            close_dialog = true;
+                        }
+                    });
+                });
+            if close_dialog || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                self.show_open_dialog = false;
+            }
+        }
+
+        // --- NEW PROJECT DIALOG ---
+        if self.show_new_project_dialog {
+            let mut close_dialog = false;
+            egui::Window::new(" Create New Project ")
+                .resizable(false)
+                .collapsible(false)
+                .frame(egui::Frame::default().fill(retro_gray).stroke(egui::Stroke::new(2.0_f32, retro_yellow)).inner_margin(12.0))
+                .show(ctx, |ui| {
+                    ui.style_mut().visuals.override_text_color = Some(retro_black);
+                    ui.label("Enter new project directory name:");
+                    ui.add(egui::TextEdit::singleline(&mut self.dialog_input_path).text_color(retro_white));
+                    ui.add_space(8.0);
+                    ui.horizontal(|ui| {
+                        ui.style_mut().visuals.widgets.inactive.bg_fill = retro_cyan;
+                        ui.style_mut().visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0_f32, retro_white);
+                        if ui.button(" Create ").clicked() {
+                            let _ = std::fs::create_dir_all(&self.dialog_input_path);
+                            self.current_file_path = format!("{}/main.fnx", self.dialog_input_path);
+                            self.source_code = "println(\"Welcome to your new project!\");\n".to_string();
+                            let _ = std::fs::write(&self.current_file_path, &self.source_code);
+                            self.compile_code();
+                            close_dialog = true;
+                        }
+                        if ui.button(" Cancel ").clicked() {
+                            close_dialog = true;
+                        }
+                    });
+                });
+            if close_dialog || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                self.show_new_project_dialog = false;
             }
         }
     }
